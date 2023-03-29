@@ -6,8 +6,10 @@ import random
 import collections
 import sqlite3
 from PIL import Image
+import math
+from pgzero.builtins import Actor, animate, keyboard
 
-__author__ = "CSE 18"
+__author__ = "Ahmet Tolga Erdönmez"
 __version__ = "1.0"
 
 # initiliazing pygame
@@ -99,7 +101,7 @@ class game_car:
     def draw(self, window):
         self.img = pygame.image.load('Img/Char/car' + str(self.type) + '.png')
         # Calculate the rotation angle based on the x_change
-        angle = -self.x_change * 20
+        angle = -self.x_change * 10
         rotated_img = pygame.transform.rotate(self.img, angle)
         # Calculate the new x and y positions after rotation
         new_rect = rotated_img.get_rect(center=self.img.get_rect(topleft=(self.x, self.y)).center)
@@ -250,49 +252,111 @@ class Car:
         self.y = y
         self.angle = 0
         self.image = pygame.image.load(image)
+        self.crashed = False  # initialize crashed flag to False
 
     def rotate_left(self):
         self.angle += 90
+        if self.x > math.pi / 2:  # constrain movement to left half of road
+            self.x -= 10
 
     def rotate_right(self):
         self.angle -= 90
+        if self.x < math.pi / 2:  # constrain movement to right half of road
+            self.x += 2
 
     def draw(self, display):
         rotated_image = pygame.transform.rotate(self.image, self.angle)
         display.blit(rotated_image, (self.x, self.y))
+
+    def update_car(self):
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_LEFT or event.key == pygame.K_a:
+                    if self.x > math.pi / 2:  # constrain movement to left half of road
+                        self.x -= 10
+                elif event.key == pygame.K_RIGHT or event.key == pygame.K_d:
+                    if self.x < math.pi / 2:  # constrain movement to right half of road
+                        self.x += 2
+                elif event.key == pygame.K_SPACE:
+                    self.crashed = True  # set crashed flag to True
+                    gameDisplay.paused = True
+                    gameDisplay.pause_game()
+            if event.type == pygame.KEYUP:
+                if event.key == pygame.K_LEFT or event.key == pygame.K_RIGHT or event.key == pygame.K_a or event.key == pygame.K_d:
+                    pass  # do nothing
+
+    # check if car is outside bounds of track
+        if self.x < math.pi / 2 or self.x > -math.pi / 2:
+            self.crashed = True  # set crashed flag to True
+
+        # check if car passes the arcs and destroy the car
+        if (self.y < self.road_y + 310 and (self.x < math.pi / 2 or self.x > -math.pi / 2)) or (self.y > self.road_y + 495 and (self.x > math.pi / 2 or self.x < -math.pi / 2)):
+            self.crashed = True
+
+        if not self.crashed:
+            # update car's position
+            self.x += self.x_change
 
 
 
 
 class display:
     def __init__(self, w, h):
-
         self.width = w
         self.height = h
         self.display = pygame.display.set_mode((self.width, self.height))
         self.paused = False
-        # self.bg_img = pygame.transform.scale(pygame.image.load('Img/Bg/road2.png').convert(),50)
-        self.bg_img = pygame.transform.scale(pygame.image.load('Img/Bg/image6.png').convert(), (1000, 1000))
-        self.bg_y = -600
-        self.bg_state = 'ON'
+        self.bg_color = (0, 128, 0)  # Green background color
+        self.road_color = (120, 120, 120)  # Gray road color
+        self.line_color = (255, 255, 255)  # White line color
+        self.line_width = 6
+        self.line_gap = 20  # Gap between dashed lines
+        self.line_length = 60  # Length of dashed lines
+        self.road_width = 500  # Width of road
+        self.road_x = (self.width - self.road_width) // 2  # X position of road
+        self.road_y = 0  # Y position of road
+        self.line_y = -self.line_length  # Y position of first dashed line
         self.db = init_database()
+        self.bg_state = 'ON'
         self.car = Car(400, 300, 'Img/icon.png')
         pygame.display.set_caption('Race')
         pygame.display.set_icon(pygame.image.load('Img/icon.png'))
 
+    def draw_bg(self, game_speed):
+        # Draw green background
+        self.display.fill(self.bg_color)
 
-  
+        # Draw gray road
+        pygame.draw.arc(self.display, (255, 0, 0), (self.road_x - 5, self.road_y - 5, self.road_width + 10, self.height + 310), math.pi / 2, -math.pi / 2, 505)
+        pygame.draw.arc(self.display, (255, 0, 0), (self.road_x - 5, self.road_y + 495, self.road_width + 10, self.height + 310), -math.pi / 2, math.pi / 2, 305)
 
-    def draw_bg(self, game_speed, angle, x_offset=0, y_offset=0):
-        rotated_bg_img = pygame.transform.rotate(self.bg_img, angle)
-        if self.bg_y > 0:
-           self.bg_y = -500
-        self.bg_y += game_speed
-        self.display.blit(rotated_bg_img, (x_offset, self.bg_y + y_offset))
+        pygame.draw.arc (self.display, self.road_color, (self.road_x, self.road_y, self.road_width, self.height+300),math.pi/2,-math.pi/2,500)
+        pygame.draw.arc (self.display, self.road_color, (self.road_x, self.road_y+500, self.road_width, self.height+300),-math.pi/2,math.pi/2,300)
 
+        # Draw dashed lines
+        while self.line_y < self.height:
+            pygame.draw.line(self.display, self.line_color, (self.width // 2, self.line_y), (self.width // 2, self.line_y + self.line_length), self.line_width)
+            self.line_y += self.line_gap + self.line_length
+
+        # Move road and lines downwards
+        self.road_y += game_speed
+        self.line_y -= game_speed
+
+        # Reset road and line positions when they go offscreen
+        
+        # road ke kitne screen se gujar jane ke baad ye road generate krta h 
+        if self.road_y > self.height/4:
+            self.road_y = -self.road_width
+        if self.line_y + self.line_length > self.height/4:
+            self.line_y = -self.line_length 
+
+        
+        
+        
     def text_objects(self, text, font, color):
         textSurface = font.render(text, True, color)
         return textSurface, textSurface.get_rect()
+        
 
     def message_display(self, text, second):
         largeText = pygame.font.Font(fonts['roboto_black'], 100)
@@ -586,8 +650,6 @@ class display:
             lives.draw(gameDisplay.display)
             x += 42
 
-
-
 # FONTS
 fonts = {'roboto_black': 'Fonts/Roboto-Black_0.ttf', 'roboto_medium': 'Fonts/Roboto-Medium_0.ttf'}
 
@@ -617,18 +679,18 @@ clock = pygame.time.Clock()
 gameDisplay = display(800, 600)
 
 # SETTING FPS
-fps = 20
+fps = 60
 
 # CREATING CAR
 car = game_car(gameDisplay, 5)
 
 def game_loop():
     # setting speed of the game
-    game_speed = 4
+    game_speed = 7
     # points
     cur_points = 0
     # setting level
-    level = 0
+    level = 1
     # reseting car's position and setting the current car tpye
     car.reset_pos(gameDisplay)
     car.type = gameDisplay.db.get_current()
@@ -681,17 +743,14 @@ def game_loop():
             gameDisplay.crash(level, cur_points)
 
         #DRAWING OBJECTS
+        
 
         # setting background
         if gameDisplay.bg_state == "ON":
             angle = 0  # rotation angle in degrees
             game_speed = 6  # example game speed value
-            angle1 = 50  # rotation angle in degrees
-            gameDisplay.draw_bg(game_speed, angle)
-            # for i in range(5):
-            #   gameDisplay.draw_bgg(game_speed, angle, y_offset=i*100/30)
-            # for i in range(5):  
-            #     gameDisplay.draw_bgs(game_speed, angle, x_offset=i*50/80, y_offset=i*50/80)
+            
+            gameDisplay.draw_bg(game_speed)
         else:
             gameDisplay.display.fill((56, 56, 56))
 
@@ -758,18 +817,14 @@ def game_loop():
                     # next wave starts
                     elif cur_points % 10 == 0 and cur_points > 0:
                         # setting new particles
-                        place_list=['KP_16 reception','Cricket_Stadium','KSAC','The Address','Khao Gully',
-                                    'Campus 6','Central Library','Kims','Successful!']
                         particle_amount += 2
                         particles_added = True
                         # playing next wave effects
                         gameDisplay.display.fill(white)
-                        
+                        level += 1
                         pygame.mixer.music.stop()
                         pygame.mixer.Sound.play(wave_sound)
-                        gameDisplay.message_display(f'{place_list[level]}', 3)
-                        level += 1
-
+                        gameDisplay.message_display('Wave {} !'.format(level), 2)
                 elif cur_part.color == blue:
                     pygame.mixer.music.stop()
                     pygame.mixer.Sound.play(speedup_sound)
